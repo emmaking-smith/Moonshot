@@ -135,6 +135,8 @@ def main():
     ax.set_ylabel('Pred Inhibition (%)')
     ax.set_title('RBF Gaussian Process Regression')
     plt.errorbar(test_inhib, rbf_preds, yerr=1.96*rbf_std, fmt='o', color='black', ecolor='lightgray', elinewidth=3, capsize=0)
+    for i,xy in enumerate(zip(test_inhib, rbf_preds)):
+        ax.annotate(xy=xy, text=test_df.index[i])
     plt.savefig('rbf.png')
 
     # Matern Plots (whole molecules).
@@ -145,6 +147,8 @@ def main():
     ax.set_ylabel('Pred Inhibition (%)')
     ax.set_title('Matern Gaussian Process Regression')
     plt.errorbar(test_inhib, matern_preds, yerr=1.96 * matern_std, fmt='o', color='black', ecolor='lightgray', elinewidth=3, capsize=0)
+    for i,xy in enumerate(zip(test_inhib, matern_preds)):
+        ax.annotate(xy=xy, text=test_df.index[i])
     plt.savefig('matern.png')
 
     # RBF Plots (amines).
@@ -155,6 +159,8 @@ def main():
     ax.set_ylabel('Pred Inhibition (%)')
     ax.set_title('RBF Gaussian Process Regression (Amine Fragments)')
     plt.errorbar(test_inhib, amine_rbf_preds, yerr=1.96 * amine_rbf_std, fmt='o', color='black', ecolor='lightgray', elinewidth=3, capsize=0)
+    for i,xy in enumerate(zip(test_inhib, amine_rbf_preds)):
+        ax.annotate(xy=xy, text=test_df.index[i])
     plt.savefig('rbf_amine.png')
 
     # Matern Plots (amines).
@@ -165,6 +171,8 @@ def main():
     ax.set_ylabel('Pred Inhibition (%)')
     ax.set_title('Matern Gaussian Process Regression (Amine Fragments)')
     plt.errorbar(test_inhib, amine_matern_preds, yerr=1.96 * amine_matern_std, fmt='o', color='black', ecolor='lightgray', elinewidth=3, capsize=0)
+    for i, xy in enumerate(zip(test_inhib, amine_matern_preds)):
+        ax.annotate(xy=xy, text=test_df.index[i])
     plt.savefig('matern_amine.png')
 
 if __name__ == '__main__':
