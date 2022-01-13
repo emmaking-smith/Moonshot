@@ -109,15 +109,15 @@ def main():
         train_df, test_df = leaveoneout_splits(df, i)
 
         # Converting the whole molecule to fingerprints.
-        # train_smiles = train_df['SMILES'].to_list()
-        # train_mols = [Chem.MolFromSmiles(s) for s in train_smiles]
-        # train_fingerprints = [Chem.RDKFingerprint(m) for m in train_mols]
-        # train_fingerprints = np.ravel(train_fingerprints).reshape(len(train_smiles), -1)
-        #
-        # test_smiles = test_df['SMILES'].to_list()
-        # test_mols = [Chem.MolFromSmiles(s) for s in test_smiles]
-        # test_fingerprints = [Chem.RDKFingerprint(m) for m in test_mols]
-        # test_fingerprints = np.ravel(test_fingerprints).reshape(len(test_smiles), -1)
+        train_smiles = train_df['SMILES'].to_list()
+        train_mols = [Chem.MolFromSmiles(s) for s in train_smiles]
+        train_fingerprints = [Chem.RDKFingerprint(m) for m in train_mols]
+        train_fingerprints = np.ravel(train_fingerprints).reshape(len(train_smiles), -1)
+
+        test_smiles = test_df['SMILES'].to_list()
+        test_mols = [Chem.MolFromSmiles(s) for s in test_smiles]
+        test_fingerprints = [Chem.RDKFingerprint(m) for m in test_mols]
+        test_fingerprints = np.ravel(test_fingerprints).reshape(len(test_smiles), -1)
 
         # Converting the amines to fingerprints.
         train_amine_mols = train_df['Amine'].to_list()
@@ -132,21 +132,21 @@ def main():
         train_inhib = train_df['Inhibition']
 
         # Gaussian Process training on whole molecules.
-        # rbf_gp.fit(train_fingerprints, train_inhib)
-        # matern_gp.fit(train_fingerprints, train_inhib)
-        #
-        # # Testing the gaussian processes on whole molecules.
-        # rbf_pred, rbf_std = rbf_gp.predict(test_fingerprints, return_std=True)
-        # print("rbf_pred", rbf_pred[0])
-        # print("rbf_std", rbf_std[0])
-        # matern_pred, matern_std = matern_gp.predict(test_fingerprints, return_std=True)
-        # print("matern_pred", matern_pred[0])
-        # print("matern_std", matern_std[0])
-        # # Appending Results to Lists.
-        # rbf_preds.append(rbf_pred[0])
-        # rbf_stds.append(rbf_std[0])
-        # matern_preds.append(matern_pred[0])
-        # matern_stds.append(matern_std[0])
+        rbf_gp.fit(train_fingerprints, train_inhib)
+        matern_gp.fit(train_fingerprints, train_inhib)
+
+        # Testing the gaussian processes on whole molecules.
+        rbf_pred, rbf_std = rbf_gp.predict(test_fingerprints, return_std=True)
+        print("rbf_pred", rbf_pred[0])
+        print("rbf_std", rbf_std[0])
+        matern_pred, matern_std = matern_gp.predict(test_fingerprints, return_std=True)
+        print("matern_pred", matern_pred[0])
+        print("matern_std", matern_std[0])
+        # Appending Results to Lists.
+        rbf_preds.append(rbf_pred[0])
+        rbf_stds.append(rbf_std[0])
+        matern_preds.append(matern_pred[0])
+        matern_stds.append(matern_std[0])
 
         # Gaussian Process training on amines.
         rbf_gp.fit(train_amine_fingerprints, train_inhib)
