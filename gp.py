@@ -11,9 +11,10 @@ import random
 from rdkit import Chem
 from rdkit.Chem import AllChem
 import matplotlib.pyplot as plt
-
+from pylab import *
+import seaborn as sns
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import Matern, WhiteKernel, RBF
+from sklearn.gaussian_process.kernels import Matern, RBF
 
 # Defining the kernels
 rbf_kernel = RBF()
@@ -33,16 +34,16 @@ out user defined percentage of molecules.
 '''
 def train_test_split(df, test_ratio=0.05):
     random.seed(1)
-    smiles = df['SMILES']
+    smiles = df['amine']
     # Finding the smiles that will be used for the test dataset.
     test_smiles = random.sample(smiles.to_list(), int(np.ceil(test_ratio*len(df))))
     test_df = pd.DataFrame()
 
     # Splitting the dataframe into test and non-test (train).
     for smile in test_smiles:
-        test_row = df[df['SMILES'] == smile]
+        test_row = df[df['amine'] == smile]
         test_df = pd.concat([test_df, test_row])
-        df = df[df['SMILES'] != smile]
+        df = df[df['amine'] != smile]
 
     return df, test_df
 '''
@@ -85,14 +86,8 @@ def remove_acid(df):
 
 def main():
     # Importing the data.
-    df = pd.read_csv('/Users/emmaking-smith/Moonshot/noisy_amides.csv', index_col=0)
+    df = pd.read_csv('/Users/emmaking-smith/Moonshot/FINAL_CORRECTED_amide_coupling.csv', index_col=0)
     df = df.reset_index(drop=True)
-
-    # Adding Inhibition (100 - Activity) column.
-    df['Inhibition'] = 100 - df['Mean activity (%)']
-
-    # Generating the amine fragments column.
-    df = remove_acid(df)
 
     rbf_preds = []
     rbf_stds = []
@@ -108,30 +103,30 @@ def main():
     for i in range(len(df)):
         train_df, test_df = leaveoneout_splits(df, i)
 
-        # Converting the whole molecule to fingerprints.
-        train_smiles = train_df['SMILES'].to_list()
-        train_mols = [Chem.MolFromSmiles(s) for s in train_smiles]
+        # Converting the amines to fingerprints.
+        train_smiles = train_df['amine'].tolist()
+        train_mols = []
+        for s in train_smiles:
+            # One SMILES string doesn't have the proper number of hydrogens on aromatic nitrogen.
+            if s == 'Cc1cc(C)c(CN)c(=O)n1':
+                s = 'Cc1cc(C)c(CN)c(=O)[nH]1'
+            train_mols.append(Chem.MolFromSmiles(s))
         train_fingerprints = [Chem.RDKFingerprint(m) for m in train_mols]
         train_fingerprints = np.ravel(train_fingerprints).reshape(len(train_smiles), -1)
 
-        test_smiles = test_df['SMILES'].to_list()
+        test_smiles = test_df['amine'].to_list()
+        # One SMILES string doesn't have the proper number of hydrogens on aromatic nitrogen.
+        if test_smiles[0] == 'Cc1cc(C)c(CN)c(=O)n1':
+            test_smiles[0] = 'Cc1cc(C)c(CN)c(=O)[nH]1'
+
         test_mols = [Chem.MolFromSmiles(s) for s in test_smiles]
         test_fingerprints = [Chem.RDKFingerprint(m) for m in test_mols]
         test_fingerprints = np.ravel(test_fingerprints).reshape(len(test_smiles), -1)
 
-        # Converting the amines to fingerprints.
-        train_amine_mols = train_df['Amine'].to_list()
-        train_amine_fingerprints = [Chem.RDKFingerprint(m) for m in train_amine_mols]
-        train_amine_fingerprints = np.ravel(train_amine_fingerprints).reshape(len(train_amine_mols), -1)
-
-        test_amine_mols = test_df['Amine'].to_list()
-        test_amine_fingerprints = [Chem.RDKFingerprint(m) for m in test_amine_mols]
-        test_amine_fingerprints = np.ravel(test_amine_fingerprints).reshape(len(test_amine_mols), -1)
-
         # Retrieving the labels for the train / test sets.
-        train_inhib = train_df['Inhibition']
+        train_inhib = train_df['inhibition']
 
-        # Gaussian Process training on whole molecules.
+        # Gaussian Process training.
         rbf_gp.fit(train_fingerprints, train_inhib)
         matern_gp.fit(train_fingerprints, train_inhib)
 
@@ -148,69 +143,53 @@ def main():
         matern_preds.append(matern_pred[0])
         matern_stds.append(matern_std[0])
 
-        # Gaussian Process training on amines.
-        rbf_gp.fit(train_amine_fingerprints, train_inhib)
-        matern_gp.fit(train_amine_fingerprints, train_inhib)
+    np.save('rbf_preds.npy', rbf_preds)
+    np.save('rbf_stds.npy', rbf_stds)
+    np.save('matern_preds.npy', matern_preds)
+    np.save('matern_stds.npy', matern_stds)
 
-        # Testing the gaussian processes on amines.
-        amine_rbf_pred, amine_rbf_std = rbf_gp.predict(test_amine_fingerprints, return_std=True)
-        amine_matern_pred, amine_matern_std = matern_gp.predict(test_amine_fingerprints, return_std=True)
-
-        # Appending Results to Lists.
-        amine_rbf_preds.append(amine_rbf_pred[0])
-        amine_rbf_stds.append(amine_rbf_std[0])
-        print("amine_rbf_pred", amine_rbf_pred[0])
-        amine_matern_preds.append(amine_matern_pred[0])
-        print("amine_matern_pred", amine_matern_pred[0])
-        amine_matern_stds.append(amine_matern_std[0])
-
-    # RBF Plots (whole molecules).
-    fig, ax = plt.subplots()
-    # y = x line.
-    ax.plot([0, 1], [0, 1], transform=ax.transAxes, color='b')
+    # RBF Plots.
+    fig, ax = plt.subplots(figsize=(8,8))
+    ax.plot([0, 1], [0, 1], '--', transform=ax.transAxes, color='gray')
     ax.set_xlabel('True Inhibition (%)')
     ax.set_ylabel('Pred Inhibition (%)')
     ax.set_title('RBF Gaussian Process Regression (Leave One Out)')
-    plt.errorbar(np.array(df['Inhibition']), np.array(rbf_preds), yerr=2*1.96*np.array(rbf_stds), fmt='o', color='black', ecolor='lightgray', elinewidth=3, capsize=0)
-    for i,xy in enumerate(zip(df['Inhibition'], rbf_preds)):
-        ax.annotate(xy=xy, text=str(i))
-    plt.savefig('loo_rbf.png')
+
+    cmap = sns.cubehelix_palette(as_cmap=True)
+
+    scatter_kwargs = {"zorder": 100}
+    error_kwargs = {"lw": .5, "zorder": 0}
+
+    points = plt.scatter(np.array(df['inhibition']), np.array(rbf_preds), s=20, c=np.array(df['yield']), cmap=cmap, **scatter_kwargs)
+    plt.errorbar(np.array(df['inhibition']), np.array(rbf_preds), yerr=2*1.96*np.array(rbf_stds), fmt='None', ecolor='gray', **error_kwargs)
+
+    # for i,xy in enumerate(zip(df['Inhibition'], rbf_preds)):
+    #     ax.annotate(xy=xy, text=str(i))
+    fig.colorbar(points)
+    plt.savefig('correct_rbf.png')
 
     # Matern Plots (whole molecules).
-    fig, ax = plt.subplots()
-    # y = x line.
-    ax.plot([0, 1], [0, 1], transform=ax.transAxes, color='b')
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.plot([0, 1], [0, 1], '--', transform=ax.transAxes, color='gray')
     ax.set_xlabel('True Inhibition (%)')
     ax.set_ylabel('Pred Inhibition (%)')
     ax.set_title('Matern Gaussian Process Regression (Leave One Out)')
-    plt.errorbar(np.array(df['Inhibition']), np.array(matern_preds), yerr=2*1.96*np.array(matern_stds), fmt='o', color='black', ecolor='lightgray', elinewidth=3, capsize=0)
-    for i,xy in enumerate(zip(df['Inhibition'], matern_preds)):
-        ax.annotate(xy=xy, text=str(i))
-    plt.savefig('loo_matern.png')
-    print("")
-    # RBF Plots (amines).
-    fig, ax = plt.subplots()
-    # y = x line.
-    ax.plot([0, 1], [0, 1], transform=ax.transAxes, color='b')
-    ax.set_xlabel('True Inhibition (%)')
-    ax.set_ylabel('Pred Inhibition (%)')
-    ax.set_title('RBF Gaussian Process Regression (Leave One Out, Amine Fragments)')
-    plt.errorbar(np.array(df['Inhibition']), np.array(amine_rbf_preds), yerr=2*1.96*np.array(amine_rbf_stds), fmt='o', color='black', ecolor='lightgray', elinewidth=3, capsize=0)
-    for i,xy in enumerate(zip(df['Inhibition'], amine_rbf_preds)):
-        ax.annotate(xy=xy, text=str(i))
-    plt.savefig('loo_amine_rbf.png')
 
-    # Matern Plots (amines).
-    fig, ax = plt.subplots()
-    # y = x line.
-    ax.plot([0, 1], [0, 1], transform=ax.transAxes, color='b')
-    ax.set_xlabel('True Inhibition (%)')
-    ax.set_ylabel('Pred Inhibition (%)')
-    ax.set_title('Matern Gaussian Process Regression (Leave One Out, Amine Fragments)')
-    plt.errorbar(np.array(df['Inhibition']), np.array(amine_matern_preds), yerr=2*1.96*np.array(amine_matern_stds), fmt='o', color='black', ecolor='lightgray', elinewidth=3, capsize=0)
-    for i,xy in enumerate(zip(df['Inhibition'], amine_matern_preds)):
-        ax.annotate(xy=xy, text=str(i))
-    plt.savefig('loo_amine_matern.png')
+    cmap = sns.cubehelix_palette(as_cmap=True)
+
+    scatter_kwargs = {"zorder": 100}
+    error_kwargs = {"lw": .5, "zorder": 0}
+
+    points = plt.scatter(np.array(df['inhibition']), np.array(matern_preds), s=20, c=np.array(df['yield']), cmap=cmap,
+                         **scatter_kwargs)
+    plt.errorbar(np.array(df['inhibition']), np.array(matern_preds), yerr=2 * 1.96 * np.array(matern_stds), fmt='None',
+                 ecolor='gray', **error_kwargs)
+
+    # for i,xy in enumerate(zip(df['Inhibition'], rbf_preds)):
+    #     ax.annotate(xy=xy, text=str(i))
+    fig.colorbar(points)
+    plt.savefig('correct_matern.png')
 
 if __name__ == '__main__':
     main()
